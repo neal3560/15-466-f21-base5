@@ -1,8 +1,8 @@
-# (TODO: your game's title)
+# Rolling Ball
 
-Author: (TODO: your name)
+Author: Wenxuan Huang
 
-Design: (TODO: In two sentences or fewer, describe what is new and interesting about your game.)
+Design: Acting as a rolling ball and try to reach the goal and not fall down.
 
 Screen Shot:
 
@@ -10,9 +10,9 @@ Screen Shot:
 
 How To Play:
 
-(TODO: describe the controls and (if needed) goals/strategy.)
+WASD to boost and mouse motion to rotate the camera
 
-Sources: (TODO: list a source URL for any assets you did not create yourself. Make sure you have a license for the asset.)
+Sources:  sphere-roller.blend -- Jim McCann
 
 This game was built with [NEST](NEST.md).
 

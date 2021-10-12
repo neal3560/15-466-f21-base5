@@ -13,6 +13,7 @@
 
 #include <random>
 
+/*
 GLuint phonebank_meshes_for_lit_color_texture_program = 0;
 Load< MeshBuffer > phonebank_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("phone-bank.pnct"));
@@ -42,12 +43,45 @@ Load< WalkMeshes > phonebank_walkmeshes(LoadTagDefault, []() -> WalkMeshes const
 	WalkMeshes *ret = new WalkMeshes(data_path("phone-bank.w"));
 	walkmesh = &ret->lookup("WalkMesh");
 	return ret;
+});*/
+
+
+GLuint roller_meshes_for_lit_color_texture_program = 0;
+Load< MeshBuffer > roller_meshes(LoadTagDefault, []() -> MeshBuffer const* {
+	MeshBuffer const* ret = new MeshBuffer(data_path("roller.pnct"));
+	roller_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+	return ret;
 });
 
-PlayMode::PlayMode() : scene(*phonebank_scene) {
+Load< Scene > roller_scene(LoadTagDefault, []() -> Scene const* {
+	return new Scene(data_path("roller.scene"), [&](Scene& scene, Scene::Transform* transform, std::string const& mesh_name) {
+		Mesh const& mesh = roller_meshes->lookup(mesh_name);
+
+		scene.drawables.emplace_back(transform);
+		Scene::Drawable& drawable = scene.drawables.back();
+
+		drawable.pipeline = lit_color_texture_program_pipeline;
+
+		drawable.pipeline.vao = roller_meshes_for_lit_color_texture_program;
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+
+	});
+});
+
+WalkMesh const* walkmesh = nullptr;
+Load< WalkMeshes > roller_walkmeshes(LoadTagDefault, []() -> WalkMeshes const* {
+	WalkMeshes* ret = new WalkMeshes(data_path("roller.w"));
+	walkmesh = &ret->lookup("Plane.004");
+	return ret;
+});
+
+PlayMode::PlayMode() : scene(*roller_scene) {
 	//create a player transform:
 	scene.transforms.emplace_back();
 	player.transform = &scene.transforms.back();
+	playerStart = *player.transform;
 
 	//create a player camera attached to a child of the player transform:
 	scene.transforms.emplace_back();
@@ -58,13 +92,17 @@ PlayMode::PlayMode() : scene(*phonebank_scene) {
 	player.camera->transform->parent = player.transform;
 
 	//player's eyes are 1.8 units above the ground:
-	player.camera->transform->position = glm::vec3(0.0f, 0.0f, 1.8f);
+	player.camera->transform->position = glm::vec3(0.0f, 0.0f, 3.0f);
 
 	//rotate camera facing direction (-z) to player facing direction (+y):
 	player.camera->transform->rotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
 	//start player walking at nearest walk point:
 	player.at = walkmesh->nearest_walk_point(player.transform->position);
+
+	for (auto& transform : scene.transforms) {
+		if (transform.name == "Goal.001") goal_position = transform.position;
+	}
 
 }
 
@@ -139,8 +177,19 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 void PlayMode::update(float elapsed) {
 	//player walking:
 	{
+		if (countDown > 0) {
+			countDown -= elapsed;
+		}
+
+		if (length(player.transform->position - goal_position) < 1.6f) {
+			status = "You Win";
+			countDown = 2.0f;
+			player.at = walkmesh->nearest_walk_point(player.transform->position);
+			velocity = glm::vec2(0.0f);
+		}
+
 		//combine inputs into a move:
-		constexpr float PlayerSpeed = 3.0f;
+		//constexpr float PlayerSpeed = 3.0f;
 		glm::vec2 move = glm::vec2(0.0f);
 		if (left.pressed && !right.pressed) move.x =-1.0f;
 		if (!left.pressed && right.pressed) move.x = 1.0f;
@@ -148,10 +197,21 @@ void PlayMode::update(float elapsed) {
 		if (!down.pressed && up.pressed) move.y = 1.0f;
 
 		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
+		if (move != glm::vec2(0.0f)) {
+			move = glm::normalize(move) * playerForce * elapsed;
+			velocity += move;
+		}
+
+		if (length(velocity) != 0.0f) {
+			glm::vec2 decreased_velocity = velocity - glm::normalize(velocity) * friction * elapsed;
+			if (glm::dot(decreased_velocity, velocity) < 0.0f) {
+				decreased_velocity = glm::vec2(0.0f, 0.0f);
+			}
+			velocity = decreased_velocity;
+		}
 
 		//get move in world coordinate system:
-		glm::vec3 remain = player.transform->make_local_to_world() * glm::vec4(move.x, move.y, 0.0f, 0.0f);
+		glm::vec3 remain = player.transform->make_local_to_world() * glm::vec4(velocity.x, velocity.y, 0.0f, 0.0f);
 
 		//using a for() instead of a while() here so that if walkpoint gets stuck in
 		// some awkward case, code will not infinite loop:
@@ -177,6 +237,7 @@ void PlayMode::update(float elapsed) {
 				remain = rotation * remain;
 			} else {
 				//ran into a wall, bounce / slide along it:
+				/*
 				glm::vec3 const &a = walkmesh->vertices[player.at.indices.x];
 				glm::vec3 const &b = walkmesh->vertices[player.at.indices.y];
 				glm::vec3 const &c = walkmesh->vertices[player.at.indices.z];
@@ -192,7 +253,12 @@ void PlayMode::update(float elapsed) {
 				} else {
 					//if it's just pointing along the edge, bend slightly away from wall:
 					remain += 0.01f * d * in;
-				}
+				}*/
+				*player.transform = playerStart;
+				player.at = walkmesh->nearest_walk_point(player.transform->position);
+				velocity = glm::vec2(0.0f);
+				status = "You Died";
+				countDown = 2.0f;
 			}
 		}
 
@@ -260,7 +326,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			0.0f, 0.0f, 0.0f, 1.0f
 		));
 
-		constexpr float H = 0.09f;
+		float H = 0.09f;
 		lines.draw_text("Mouse motion looks; WASD moves; escape ungrabs mouse",
 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
@@ -270,6 +336,20 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
+		H = 0.4f;
+		if (countDown > 0.0f) {
+
+			lines.draw_text(status,
+				glm::vec3(-aspect * 0.4f + 0.1f * H, 0.1f * H, 0.0),
+				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+				glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+
+			lines.draw_text(status,
+				glm::vec3(-aspect * 0.4f + 0.1f * H + ofs, 0.1f * H + ofs, 0.0),
+				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+				glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		}
 	}
 	GL_ERRORS();
 }

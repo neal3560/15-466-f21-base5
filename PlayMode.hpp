@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <deque>
+#include <string>
 
 struct PlayMode : Mode {
 	PlayMode();
@@ -27,6 +28,18 @@ struct PlayMode : Mode {
 
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
+
+	float friction = 0.05f;
+	float playerForce = 0.2f;
+	glm::vec2 velocity = glm::vec2(0.0f, 0.0f);
+
+	Scene::Transform playerStart;
+
+	glm::vec3 goal_position;
+
+	std::string status = "";
+
+	float countDown = 0.0f;
 
 	//player info:
 	struct Player {
